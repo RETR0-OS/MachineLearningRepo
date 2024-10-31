@@ -5,12 +5,13 @@ pd.set_option('future.no_silent_downcasting', True)
 
 '''
 Steps:
-1) Initialize a weight matrix of shape (1, x_cols) 
-2) Initialize a bias matrix of shape (1, x_cols)
+1) Initialize a weight matrix of shape (x_rows, x_cols) 
+2) Initialize a bias matrix of shape (x_rows, 1)
 3) Define cost function using MSE.
 4) Perform Gradient Descent on the cost function.
 5) Update weights and biases.
 6) Reiterate
+7) After training is done, take column-wise mean of all columns for weights and biases.
 '''
 
 class LinearRegression:
