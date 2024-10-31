@@ -11,7 +11,7 @@ Steps:
 4) Perform Gradient Descent on the cost function.
 5) Update weights and biases.
 6) Reiterate
-7) After training is omplete, take column-wise mean of all columns for weights and biases.
+7) After training is complete, take column-wise mean of all columns for weights and biases.
 '''
 
 class LinearRegression:
