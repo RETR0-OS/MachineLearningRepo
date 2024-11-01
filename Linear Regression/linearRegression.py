@@ -1,59 +1,87 @@
 import numpy as np
 import pandas as pd
 pd.set_option('future.no_silent_downcasting', True)
+# y = w_1 * x_1 + w_2 * x_2 + .... + w_n * x_n + b
+
+'''
+Steps:
+1) Initialize a weight matrix of shape (x_rows, x_cols) 
+2) Initialize a bias matrix of shape (x_rows, 1)
+3) Define cost function using MSE.
+4) Perform Gradient Descent on the cost function.
+5) Update weights and biases.
+6) Reiterate
+7) After training is complete, take column-wise mean of all columns for weights and biases.
+'''
 
 class LinearRegression:
-    def __init__(self, x_train, y_train, epochs=20, alpha=0.01):
+    weight_matrix = None
+    bias_matrix = None
+    columns = None
+    alpha = None
+    epochs = None
+    x_train = None
+    y_train = None
+    train_shape = None
+    error = None
+
+    def __init__(self, x_train, y_train, epochs=20, alpha=0.001):
         self.x_train = pd.DataFrame(x_train)
-        self.y_train = pd.DataFrame(y_train).values.reshape(-1, 1)
+        self.x_train /= self.x_train.max()
+        self.y_train = pd.DataFrame(y_train)
+        self.y_train /= self.y_train.max()
         self.shape = x_train.shape
-
-        # Scaling factors
-        self.x_scale_factor = self.x_train.max(axis=0)
-        self.y_scale_factor = self.y_train.max()
-
-        # Scale training data
-        self.x_train /= self.x_scale_factor
-        self.y_train /= self.y_scale_factor
-
-        # Initialize weight and bias matrices
-        self.weight_matrix = np.random.rand(1, self.shape[1])
-        self.bias_matrix = np.random.rand(1, 1)
+        self.y_train = np.resize(self.y_train, (self.shape[0], 1))
+        self.weight_matrix = np.random.rand(self.shape[0], self.shape[1])
+        self.bias_matrix = np.random.rand(self.shape[0], 1)
         self.epochs = epochs
         self.alpha = alpha
         self.error = 0
 
+
     def train(self):
         for i in range(self.epochs):
-            predictions = np.dot(self.x_train, self.weight_matrix.T) + self.bias_matrix  # Predicted values
+            #print(np.sum(np.matmul(self.weight_matrix, self.x_train.T), axis=1))
+            predictions = np.resize(np.sum(np.matmul(self.weight_matrix, self.x_train.T), axis=1), (self.shape[0], 1)) + self.bias_matrix
 
-            error_matrix = ((self.y_train - predictions) ** 2) / self.shape[0]  # Find MSE
-            self.error = np.sum(error_matrix)
+            error_matrix = ((self.y_train - predictions) ** 2) / self.shape[0] ## MSE Matrix
+            self.error = np.sum(error_matrix, axis=1) ## Cumulative MSE
 
-            # Gradient Descent
-            weight_gradient = -2 * np.dot((self.y_train - predictions).T, self.x_train) / self.shape[0]  # Find gradient of weights
-            bias_gradient = -2 * np.mean(self.y_train - predictions)  # Find gradient of bias
+            self.weight_matrix = self.weight_matrix - ((self.alpha * 2 * (predictions - self.y_train) * self.weight_matrix) / self.shape[0]) ## weight update
+            self.bias_matrix = self.bias_matrix - ((self.alpha * 2 * (predictions - self.y_train) * self.bias_matrix) / self.shape[0])
 
-            self.weight_matrix -= self.alpha * weight_gradient  # Update weights
-            self.bias_matrix -= self.alpha * bias_gradient  # Update bias
-
-            if i % 10 == 0:
-                print(f"Epoch {i} \t error: {self.error}")
+            if i % 10 ==0:
+                print(self.error.mean())
+        self.weight_matrix = np.mean(self.weight_matrix, axis=0).reshape(1, -1)
+        self.bias_matrix = np.mean(self.bias_matrix, axis=1).reshape(1, 1)
+        print()
+        print("*" * 50)
+        print("Training complete.")
+        print("*" * 50)
+        return self.error.mean()
 
     def predict(self, x_features):
-        x_features = pd.DataFrame(x_features)
-        x_features /= self.x_scale_factor  # Scale features
-        y_predictions = np.dot(x_features, self.weight_matrix.T) + self.bias_matrix
-        y_predictions *= self.y_scale_factor  # Scale back predictions
-        return y_predictions
+        # Convert to DataFrame and normalize with training max values
+        x_features = pd.DataFrame(x_features) / self.x_train.max()
+
+        # Predict values
+        y_predictions = np.matmul(x_features.values, self.weight_matrix.T) + self.bias_matrix  # Dot product with shape alignment
+        return y_predictions.flatten()  # Flatten to (n_samples,)
 
     def evaluate(self, x_test, y_test):
-        x_test, y_test = pd.DataFrame(x_test), pd.DataFrame(y_test).values.reshape(-1, 1)
-        y_predict = self.predict(x_test)
-        mse = np.mean((y_predict - y_test) ** 2)
-        threshhold = 3000
-        accuracy = (np.sum(np.abs(y_predict - y_test) < threshhold) / len(y_test)) * 100
-        return accuracy
+        # Generate predictions and reshape y_test for compatibility
+        y_predictions = self.predict(x_test)
+        y_test = pd.Series(y_test).values  # Convert y_test to numpy array
+
+        # Calculate Mean Squared Error (MSE)
+        mse = np.mean((y_test - y_predictions) ** 2)
+
+        # Define accuracy based on a threshold
+        threshold = 0.1  # Define acceptable error threshold
+        accuracy = np.mean(np.abs((y_test - y_predictions) / y_test) < threshold) * 100
+
+        return {"Mean Squared Error": mse, "Accuracy (%)": accuracy}
+
 
 train_data = pd.read_csv("Dataset/House price/df_train.csv")
 train_data = train_data.drop("date", axis=1)
@@ -66,9 +94,9 @@ x_train["has_lavatory"] = x_train["has_lavatory"].replace({True:1, False:0}).ast
 x_train["single_floor"] = x_train["single_floor"].replace({True:1, False:0}).astype(int)
 y_train = train_data["price"].sample(frac=1)
 model = LinearRegression(x_train, y_train, epochs=500, alpha=0.1)
-model.train()
-test_data = pd.read_csv("Dataset/House price/df_test.csv")
-x_test = test_data.drop(columns=['price', 'date'])
+error = model.train()
+test_data = pd.DataFrame(pd.read_csv("Dataset/House price/df_test.csv"))
+x_test = test_data.drop(columns=['price'])
 x_test["has_basement"] = x_test["has_basement"].replace({True:1, False:0}).astype(int)
 x_test["renovated"] = x_test["renovated"].replace({True: 1, False: 0}).astype(int)
 x_test["nice_view"] = x_test["nice_view"].replace({True:1, False:0}).astype(int)
@@ -76,5 +104,6 @@ x_test["perfect_condition"] = x_test["perfect_condition"].replace({True:1, False
 x_test["has_lavatory"] = x_test["has_lavatory"].replace({True:1, False:0}).astype(int)
 x_test["single_floor"] = x_test["single_floor"].replace({True:1, False:0}).astype(int)
 y_test = test_data['price']
-metrics= model.evaluate(x_test, y_test)
-print(f"Mean Squared Error: {metrics}")
+
+print(error)
+print(model.evaluate(x_test, y_test))
