@@ -14,73 +14,59 @@ Steps:
 7) After training is complete, take column-wise mean of all columns for weights and biases.
 '''
 
-class LinearRegression:
-    weight_matrix = None
-    bias_matrix = None
-    columns = None
-    alpha = None
-    epochs = None
-    x_train = None
-    y_train = None
-    train_shape = None
-    error = None
+import numpy as np
+import pandas as pd
 
-    def __init__(self, x_train, y_train, epochs=20, alpha=0.001):
+class LinearRegression:
+    def __init__(self, x_train, y_train, epochs=20, alpha=0.01):
         self.x_train = pd.DataFrame(x_train)
-        self.x_train /= self.x_train.max()
-        self.y_train = pd.DataFrame(y_train)
-        self.y_train /= self.y_train.max()
+        self.y_train = pd.DataFrame(y_train).values.reshape(-1, 1)
         self.shape = x_train.shape
-        self.y_train = np.resize(self.y_train, (self.shape[0], 1))
-        self.weight_matrix = np.random.rand(self.shape[0], self.shape[1])
-        self.bias_matrix = np.random.rand(self.shape[0], 1)
+
+        # Scaling factors
+        self.x_scale_factor = self.x_train.max(axis=0)
+        self.y_scale_factor = self.y_train.max()
+
+        # Scale training data
+        self.x_train /= self.x_scale_factor
+        self.y_train /= self.y_scale_factor
+
+        # Initialize weight and bias matrices
+        self.weight_matrix = np.random.rand(1, self.shape[1])
+        self.bias_matrix = np.random.rand(1, 1)
         self.epochs = epochs
         self.alpha = alpha
         self.error = 0
 
-
     def train(self):
         for i in range(self.epochs):
-            #print(np.sum(np.matmul(self.weight_matrix, self.x_train.T), axis=1))
-            predictions = np.resize(np.sum(np.matmul(self.weight_matrix, self.x_train.T), axis=1), (self.shape[0], 1)) + self.bias_matrix
+            predictions = np.dot(self.x_train, self.weight_matrix.T) + self.bias_matrix  # Predicted values
 
-            error_matrix = ((self.y_train - predictions) ** 2) / self.shape[0] ## MSE Matrix
-            self.error = np.sum(error_matrix, axis=1) ## Cumulative MSE
+            error_matrix = ((self.y_train - predictions) ** 2) / self.shape[0]  # Find MSE
+            self.error = np.sum(error_matrix)
 
-            self.weight_matrix = self.weight_matrix - ((self.alpha * 2 * (predictions - self.y_train) * self.weight_matrix) / self.shape[0]) ## weight update
-            self.bias_matrix = self.bias_matrix - ((self.alpha * 2 * (predictions - self.y_train) * self.bias_matrix) / self.shape[0])
+            # Gradient Descent
+            weight_gradient = -2 * np.dot((self.y_train - predictions).T, self.x_train) / self.shape[0]  # Find gradient of weights
+            bias_gradient = -2 * np.mean(self.y_train - predictions)  # Find gradient of bias
 
-            if i % 10 ==0:
-                print(self.error.mean())
-        self.weight_matrix = np.mean(self.weight_matrix, axis=0).reshape(1, -1)
-        self.bias_matrix = np.mean(self.bias_matrix, axis=1).reshape(1, 1)
-        print()
-        print("*" * 50)
-        print("Training complete.")
-        print("*" * 50)
-        return self.error.mean()
+            self.weight_matrix -= self.alpha * weight_gradient  # Update weights
+            self.bias_matrix -= self.alpha * bias_gradient  # Update bias
+
+            if i % 10 == 0:
+                print(f"Epoch {i} \t error: {self.error}")
 
     def predict(self, x_features):
-        # Convert to DataFrame and normalize with training max values
-        x_features = pd.DataFrame(x_features) / self.x_train.max()
-
-        # Predict values
-        y_predictions = np.matmul(x_features.values, self.weight_matrix.T) + self.bias_matrix  # Dot product with shape alignment
-        return y_predictions.flatten()  # Flatten to (n_samples,)
+        x_features = pd.DataFrame(x_features)
+        x_features /= self.x_scale_factor  # Scale features
+        y_predictions = np.dot(x_features, self.weight_matrix.T) + self.bias_matrix
+        y_predictions *= self.y_scale_factor  # Scale back predictions
+        return y_predictions
 
     def evaluate(self, x_test, y_test):
-        # Generate predictions and reshape y_test for compatibility
-        y_predictions = self.predict(x_test)
-        y_test = pd.Series(y_test).values  # Convert y_test to numpy array
-
-        # Calculate Mean Squared Error (MSE)
-        mse = np.mean((y_test - y_predictions) ** 2)
-
-        # Define accuracy based on a threshold
-        threshold = 0.1  # Define acceptable error threshold
-        accuracy = np.mean(np.abs((y_test - y_predictions) / y_test) < threshold) * 100
-
-        return {"Mean Squared Error": mse, "Accuracy (%)": accuracy}
+        x_test, y_test = pd.DataFrame(x_test), pd.DataFrame(y_test).values.reshape(-1, 1)
+        y_predict = self.predict(x_test)
+        mse = np.mean((y_predict - y_test) ** 2)
+        return mse
 
 
 train_data = pd.read_csv("Dataset/House price/df_train.csv")
